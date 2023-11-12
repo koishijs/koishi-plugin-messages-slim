@@ -3,9 +3,20 @@ import { Message } from './message'
 
 export const name = 'messages-slim'
 
-export interface Config { }
+export interface Config {
+  listeners: ('message' | 'message-deleted' | 'message-updated')[]
+}
 
-export const Config: Schema<Config> = Schema.object({})
+export const Config: Schema<Config> = Schema.object({
+  listeners: Schema.array(Schema.union([
+    Schema.const('message'),
+    Schema.const('message-deleted'),
+    Schema.const('message-updated')
+  ]))
+    .default(['message', 'message-deleted', 'message-updated'])
+    .role('checkbox')
+    .description('有什么呢')
+})
 
 export const inject = ["database"]
 
@@ -15,7 +26,8 @@ declare module 'koishi' {
   }
 }
 
-export function apply(ctx: Context) {
+export function apply(ctx: Context, config: Config) {
+  ctx.i18n.define('zh-CN', require('./locales/zh-CN'))
   ctx.model.extend('messages', {
     id: 'string',
     content: 'text',
@@ -31,11 +43,11 @@ export function apply(ctx: Context) {
     deleted: 'integer',
     avatar: 'string',
   })
-  ctx.on('message', async (session) => {
+  config.listeners.includes('message') && ctx.on('message', async (session) => {
     const msg = Message.fromSession(session)
     await ctx.database.create('messages', msg)
-  })
-  ctx.on('message-deleted', async (session) => {
+  });
+  config.listeners.includes('message-deleted') && ctx.on('message-deleted', async (session) => {
     await ctx.database.set('messages', {
       messageId: session.messageId,
       platform: session.platform,
@@ -43,8 +55,8 @@ export function apply(ctx: Context) {
       deleted: 1,
       lastUpdated: new Date(),
     })
-  })
-  ctx.on('message-updated', async (session) => {
+  });
+  config.listeners.includes('message-updated') && ctx.on('message-updated', async (session) => {
     await ctx.database.set('messages', {
       messageId: session.messageId,
       platform: session.platform,
@@ -52,7 +64,7 @@ export function apply(ctx: Context) {
       content: session.content,
       lastUpdated: new Date(),
     })
-  })
+  });
 }
 
 export * from './message'
